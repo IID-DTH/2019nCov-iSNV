@@ -1,0 +1,612 @@
+---
+title: "20201217_scripts_for_paper"
+author: "Li jr"
+date: "2020年12月17日"
+output: html_document
+---
+
+```{r dataimport}
+##Data import
+
+
+sample_seqInfor=read.delim("sample_all.txt")
+
+sample_seqInfor_select=read.delim("sampleselect.tsv")
+sample_seqInfor_select$ExpID=as.character(sample_seqInfor_select$ExpID)
+sample_seqInfor_select$patientID=as.character(sample_seqInfor_select$patientID)
+
+sample_seqInfor_select$DateType="0-14"
+sample_seqInfor_select[sample_seqInfor_select$RelativeDate>14,"DateType"]="15-28"
+sample_seqInfor_select[sample_seqInfor_select$RelativeDate>28,"DateType"]="28-42"
+sample_seqInfor_select[sample_seqInfor_select$RelativeDate>42,"DateType"]="42-"
+sample_seqInfor_select$DateType=factor(sample_seqInfor_select$DateType,levels=c("0-14","15-28","28-42","42-"))
+sample_seqInfor_select$CollectionDate2=as.Date(as.character(sample_seqInfor_select$CollectionDate),"%Y%m%d")
+
+patient_all_include=read.csv("patient_all_include.csv")
+patient_all_include$ageType="0-15"
+patient_all_include[patient_all_include$Age>15,"ageType"]="16-65"
+patient_all_include[patient_all_include$Age>65,"ageType"]="65-"
+patient_all_include$ageType=factor(patient_all_include$ageType,levels=c("0-15","16-65","65-"))
+patient_all_include$DuraType="0-14"
+patient_all_include[patient_all_include$Duration>14,"DuraType"]="15-28"
+patient_all_include[patient_all_include$Duration>28,"DuraType"]="28-42"
+patient_all_include[patient_all_include$Duration>42,"DuraType"]="42-"
+patient_all_include$DuraType=factor(patient_all_include$DuraType,levels=c("0-14","15-28","28-42","42-"))
+
+patient_select=subset(patient_all_include,patientID %in% sample_seqInfor_select$patientID)
+
+ sample_seqInfor_select_p=merge(sample_seqInfor_select,patient_select)
+
+
+
+iSNV_filter_anno=read.delim("iSNV_filtered.anno",header = F)
+iSNV_mm_raw=read.delim("iSNV_0628_mm_raw",header = F) 
+ colnames(iSNV_mm_raw)=c("ExpID","chr","pos","dep","ref","major","minor","freq_major","dep_major","freq_minor","dep_minor","dep_major_5","dep_major_3","dep_minor_5","dep_minor_3") 
+ 
+iSNV_filter_anno=iSNV_filter_anno[,c(1:13,17:18)]
+colnames(iSNV_filter_anno)=c("chr","ExpID","pos","CDS","pos_in_gene","ref","ref_coden","ref_aa","pos_in_coden","pos_in_protein","alt","alt_coden","alt_aa","freq_alt","type_iSNV")
+iSNV_filter_anno=merge(iSNV_filter_anno,iSNV_mm_raw)
+iSNV_filter_anno_select=merge(iSNV_filter_anno,sample_seqInfor_select[,c(2,6)])
+
+sample_seqInfor_select$iSNV_count5=as.numeric(table(iSNV_filter_anno_select$ExpID)[sample_seqInfor_select$ExpID])
+sample_seqInfor_select[is.na(sample_seqInfor_select$iSNV_count5),"iSNV_count5"]=0
+sample_seqInfor_select$iSNV_perKB5=sample_seqInfor_select$iSNV_count5/sample_seqInfor_select$Genome_100x*1000
+
+iSNV_filter_anno_select$position_genome=as.character(iSNV_filter_anno_select$type_iSNV)
+ iSNV_filter_anno_select[iSNV_filter_anno_select$position_genome %in% c("missense","stop-gain","synonymous","stop-loss"),"position_genome"]="coding"
+ iSNV_filter_anno_select$type_iSNV2=as.character(iSNV_filter_anno_select$type_iSNV )
+ iSNV_filter_anno_select[iSNV_filter_anno_select$type_iSNV !="synonymous","type_iSNV2"]="nonsynonymous"
+ iSNV_filter_anno_select[iSNV_filter_anno_select$position_genome !="coding","type_iSNV2"]="noncoding"
+ iSNV_filter_anno_select$CDS=as.character(iSNV_filter_anno_select$CDS)
+ iSNV_filter_anno_select[iSNV_filter_anno_select$position_genome !="coding","CDS"]=iSNV_filter_anno_select[iSNV_filter_anno_select$position_genome !="coding","position_genome"]
+ iSNV_filter_anno_select$CDS=factor(iSNV_filter_anno_select$CDS,levels=c("5'UTR","intergenic","3'UTR","S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10"))
+ 
+ 
+ 
+covid19_gene=read.delim("covid19.bed",header=F)[c(1,3:12),]
+colnames(covid19_gene)=c("chr","start","end","CDS")
+covid19_gene$geneName=as.character(covid19_gene$CDS) 
+covid19_gene$geneLen=covid19_gene$end-covid19_gene$start+1 
+covid19_gene$protein_length=covid19_gene$geneLen/3
+
+iSNV_CDS_sample_count=data.frame(table(subset(iSNV_filter_anno_select,type_iSNV2!="noncoding")[,c("ExpID","CDS")]))
+gene_coverage=read.delim("gene_coverag",header=F)
+colnames(gene_coverage)=c("ExpID","CDS","CDS_cov")
+iSNV_CDS_sample_count=merge(iSNV_CDS_sample_count,gene_coverage,all.x=T)
+iSNV_CDS_sample_count=subset(iSNV_CDS_sample_count,CDS!="3'UTR"&CDS!="5'UTR"&CDS!="intergenic")
+iSNV_CDS_sample_count$iSNV_perKB_gene=iSNV_CDS_sample_count$Freq/iSNV_CDS_sample_count$CDS_cov*1000
+
+iSNV_filter_anno_select$mut_ra=paste0(iSNV_filter_anno_select$ref,iSNV_filter_anno_select$pos,iSNV_filter_anno_select$alt)
+iSNV_filter_anno_select$mut_mm=paste0(iSNV_filter_anno_select$major,">",iSNV_filter_anno_select$minor)
+iSNV_filter_anno_select_s=merge(iSNV_filter_anno_select,sample_seqInfor_select)
+
+public_snp=read.csv("public_snp_0619.csv")
+
+patient_select$FinalLevel=factor(patient_select$FinalLevel,levels = c(1,2,3),labels = c("Mild","Moderate","Severe"))
+iSNV_filter_anno_select_s_p=merge(iSNV_filter_anno_select_s,patient_select)
+sample_seqInfor_select_p=merge(sample_seqInfor_select,patient_select)
+
+
+```
+
+
+```{r library}
+
+##library
+library(ggplot2)
+library(reshape2)
+library(gggenes)
+library(gridExtra)
+```
+
+
+```{r Figure2}
+##Figure2A
+ggplot(sample_seqInfor,aes(x=RelativeDate,y=AverageDepth))+geom_point(aes(col=SampleType,size=perc_100x),shape=1)+theme_classic()+scale_y_log10()+scale_color_manual(values = c("#8EC31E","#C30D22","#2DA7E0"))
+
+
+##Figure2B
+sample_count=data.frame(table(sample_seqInfor_select$patientID))
+sample_count$Freq2=sample_count$Freq
+sample_count[sample_count$Freq2>5,"Freq2"]=5
+ggplot(data.frame(table(sample_count$Freq2)),aes(x=Var1,y=Freq))+geom_bar(stat="identity",width=0.3)+theme_classic()+xlab("Samples/Case")+ylab("Case number")
+
+
+##Figure 2C
+
+library(gggenes)
+ggplot()+geom_gene_arrow(data=covid19_gene,aes(xmin=start,xmax=end,y=genome,fill=geneName))+scale_fill_brewer(palette = "Set3")+theme_genes()
+ggplot(iSNV_filter_anno_select,aes(x=pos))+geom_histogram(binwidth=100,aes(fill=CDS))+theme_classic()+theme(legend.position = "top")
+
+##Figure 2D
+
+iSNV_CDS_sum=data.frame(cbind(tapply(iSNV_CDS_sample_count$Freq,iSNV_CDS_sample_count$CDS,sum),tapply(iSNV_CDS_sample_count$CDS_cov,iSNV_CDS_sample_count$CDS,sum)))
+colnames(iSNV_CDS_sum)=c("iSNV_count_sum","cover_sum")
+iSNV_CDS_sum$iSNV_perKB=iSNV_CDS_sum$iSNV_count_sum/iSNV_CDS_sum$cover_sum*1000
+
+ggplot(iSNV_CDS_sum,aes(x=CDS,y=iSNV_perKB))+geom_bar(stat="identity")+xlim(rev(c("S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10")))+coord_flip()+theme_classic()
+
+##Figure 2E
+label_coden=data.frame(table(subset(iSNV_filter_anno_select,position_genome=="coding")[,c("CDS","pos_in_coden")]))
+label_coden=subset(label_coden,pos_in_coden!="-")
+label_coden$pos_x=as.numeric(label_coden$pos_in_coden)/3-0.5
+
+ggplot()+geom_bar(data=subset(iSNV_filter_anno_select,position_genome=="coding"),aes(x=CDS,fill=pos_in_coden ),position = "fill",width=0.5)+geom_text(data=label_coden,aes(x=CDS,y=pos_x,label=Freq))+xlim(rev(c("S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10")))+scale_y_continuous(breaks=c(0,1/3,2/3,1))+coord_flip()+theme_classic()
+
+##Figure 2F
+
+iSNV_count_sample=unique(iSNV_filter_anno_select[,c("mut_ra","chr","pos","ref","CDS","pos_in_gene","ref_coden","ref_aa","pos_in_coden","pos_in_protein","alt","alt_coden","alt_aa")])
+iSNV_count_sample$count_sample=as.numeric(table(iSNV_filter_anno_select$mut_ra)[iSNV_count_sample$mut_ra])
+iSNV_count_sample$count_pat=as.numeric(table(unique(iSNV_filter_anno_select[,c("mut_ra","patientID")])$mut_ra)[iSNV_count_sample$mut_ra])
+
+iSNV_count_sample_pub=merge(iSNV_count_sample,public_snp,by=c("pos"),all.x=T)
+iSNV_count_sample_pub$level_public=as.character(iSNV_count_sample_pub$level_public)
+iSNV_count_sample_pub[is.na(iSNV_count_sample_pub$level_public),"level_public"]="IV"
+
+ggplot()+geom_segment(data=subset(iSNV_count_sample_pub,count_pat>15),aes(x=pos,xend=pos,y=2,yend=count_pat,col=level_public))+geom_point(data=subset(iSNV_count_sample_pub,count_pat>1),aes(x=pos,y=count_pat,col=level_public))+theme_classic()
+
+##Figure 2G
+random_iSNV=round(runif(7037,1,29903))
+random_iSNV=random_iSNV[order(random_iSNV)]
+random_distance=array(0,7036)
+for (i in 1:7036){random_distance[i]=random_iSNV[i+1]-random_iSNV[i]}
+
+pos_iSNV=iSNV_filter_anno_select$pos
+pos_iSNV=pos_iSNV[order(pos_iSNV)]
+iSNV_dist=array(0,7036)
+for (i in 1:7036){iSNV_dist[i]=pos_iSNV[i+1]-pos_iSNV[i]}
+
+ggplot()+geom_density(data=data.frame(random_distance),aes(x=random_distance,col="expected"))+geom_density(data=data.frame(iSNV_dist),aes(x=iSNV_dist,col="iSNV"))+theme_classic()+coord_cartesian(xlim=c(0,20))
+
+##Figure 2H
+minor_count=data.frame(table(cut(iSNV_filter_anno_select$freq_minor,breaks=0.005*(10:100))))
+minor_count$label=0.005*(11:100)-0.0025
+minor_count$label_1=1/minor_count$label
+minor_count$pred=predict(lm(Freq~(label_1-1)+0,minor_count))
+summary(lm(Freq~(label_1-1)+0,minor_count))
+
+minor_count$pred_4=2.28*(minor_count$label_1-1)
+minor_count$pred_2=15.8861/(402*29.903*2.28)*(minor_count$label_1-1)
+ ggplot(minor_count,aes(x=label))+geom_bar(aes(y=Freq/(402*29.903)),stat="identity",alpha=0.5)+geom_line(aes(y=pred/(402*29.903)))+geom_line(aes(y=pred_4*0.0001),col="blue")+geom_line(aes(y=pred_4*0.001),col="red")+theme_classic()
+ 
+```
+
+```{r FigureS1}
+#FigS1B
+ggplot(sample_seqInfor_select,aes(x=perc_100x,y=iSNV_perKB5))+geom_point(aes(col=SampleType))+geom_smooth(method="lm")+theme_classic()
+
+#FigS1C
+ggplot(sample_seqInfor_select,aes(x=AverageDepth,y=iSNV_perKB5))+geom_point(aes(col=SampleType))+geom_smooth(method="lm")+theme_classic()+scale_x_log10()
+
+#FigS1D
+patient_select$patientID=as.character(patient_select$patientID)
+patient_select$iSNV_count_p=as.numeric(table(unique(iSNV_filter_anno_select[,c("patientID","mut_ra")])$patientID)[patient_select$patientID])
+patient_select[is.na(patient_select$iSNV_count_p),"iSNV_count_p"]=0
+patient_select$WithiSNV="Y"
+patient_select[patient_select$iSNV_count_p==0,"WithiSNV"]="N"
+
+p5=ggplot(patient_select,aes(x=FinalLevel,fill=WithiSNV))+geom_bar(position="fill",width=0.5)+theme_classic()+theme(legend.position = "top") 
+p6=ggplot(patient_select,aes(x=ageType,fill=WithiSNV))+geom_bar(position="fill",width=0.5)+theme_classic()+theme(legend.position = "top")
+p7=ggplot(patient_select,aes(x=Gender,fill=WithiSNV))+geom_bar(position="fill",width=0.5)+theme_classic()+theme(legend.position = "top")
+p8=ggplot(patient_select,aes(x=DuraType,fill=WithiSNV))+geom_bar(position="fill",width=0.5)+theme_classic()+theme(legend.position = "top")
+grid.arrange(p7,p8,p6,p5,widths=c(2,4,3,3))
+
+#FigS1E
+iSNV_gene_count=rbind(data.frame(table(subset(iSNV_filter_anno_select,position_genome=="coding")$CDS)),data.frame(table(iSNV_filter_anno_select$position_genome)))
+iSNV_gene_count=merge(iSNV_gene_count,covid_19_bed,by.x="Var1",by.y="gene",all.x = T)
+iSNV_gene_count[12,3:6]=c("NC_045512.2","29674","29903","229")
+iSNV_gene_count[13,3:6]=c("NC_045512.2","1","266","265")
+iSNV_gene_count[14,3:6]=c("NC_045512.2","266","29674","29264")
+iSNV_gene_count[15,3:6]=c("NC_045512.2","266","29674","145")
+iSNV_gene_count$Freq=as.numeric(iSNV_gene_count$Freq)
+
+ggplot(iSNV_gene_count,aes(x=Var1,y=Freq))+geom_bar(stat="identity")+theme_classic()+xlim(rev(c("5'UTR","intergenic","3'UTR","coding","S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10"))) +coord_flip()
+
+
+#FigS1F
+iSNV_patient_count=data.frame(table(iSNV_filter_pa$mut_ra))
+colnames(iSNV_patient_count)=c("mut_ra","count_in_pat")
+iSNV_patient_count=merge(iSNV_patient_count,unique(iSNV_filter_anno_select[,c("mut_ra","pos","ref","alt")]))
+
+iSNV_patient_count$freq_alt_mean=as.numeric(tapply(iSNV_filter_anno_select$freq_alt,iSNV_filter_anno_select$mut_ra,mean)[as.character(iSNV_patient_count$mut_ra)])
+iSNV_patient_count$freq_minor_mean=as.numeric(tapply(iSNV_filter_anno_select$freq_minor,iSNV_filter_anno_select$mut_ra,mean)[as.character(iSNV_patient_count$mut_ra)])
+
+iSNV_patient_count=merge(iSNV_patient_count,public_snp,all.x = T)
+iSNV_patient_count$level_public=as.character(iSNV_patient_count$level_public)
+iSNV_patient_count[is.na(iSNV_patient_count$level_public),"level_public"]="IV"
+ggplot(iSNV_patient_count,aes(x=count_in_pat,y=freq_alt_mean,col=level_public))+geom_jitter(aes(size=count_in_pat),shape=1)+theme_classic()
+```
+
+```{r figure3}
+
+##Fig3A 
+
+ggplot(sample_seqInfor_select,aes(x=CollectionDate2,y=iSNV_perKB5))+geom_point(aes(col=SampleType),shape=1)+geom_smooth(method="lm")+theme_classic()+scale_color_manual(values = c("#8EC31E","#C30D22","#2DA7E0"))
+
+##Fig3B
+ggplot(sample_seqInfor_select,aes(x=RelativeDate,y=iSNV_perKB5))+geom_point(aes(col=SampleType),shape=1)+geom_smooth(method="lm")+theme_classic()+scale_color_manual(values = c("#8EC31E","#C30D22","#2DA7E0"))
+
+
+#Fig3C
+iSNV_CDS_sample_count_ns=data.frame(table(subset(iSNV_filter_anno_select,type_iSNV2!="noncoding")[,c("ExpID","CDS","type_iSNV2")]))
+iSNV_CDS_sample_count_ns=subset(iSNV_CDS_sample_count_ns,Freq!=0)
+iSNV_CDS_sample_count_ns=merge(iSNV_CDS_sample_count_ns,gene_coverage,all.x=T)
+iSNV_CDS_sample_count_ns$ns_iSNV_perKB=iSNV_CDS_sample_count_ns$Freq/iSNV_CDS_sample_count_ns$CDS_cov
+iSNV_CDS_sample_count_ns[is.na(iSNV_CDS_sample_count_ns$ns_iSNV_perKB),"ns_iSNV_perKB"]=0
+iSNV_CDS_sample_count_ns=merge(iSNV_CDS_sample_count_ns,sample_seqInfor_select)
+
+ggplot(subset(iSNV_CDS_sample_count_ns,CDS %in% c("S","N","orf1ab")),aes(x=RelativeDate,y=ns_iSNV_perKB*1000,col=type_iSNV2))+geom_point()+facet_grid(.~CDS)+geom_smooth(method = "lm")+theme_classic()+coord_cartesian(ylim=c(0,3))
+
+
+
+ summary(lm(ns_iSNV_perKB*1000~RelativeDate,data=subset(iSNV_CDS_sample_count_ns,type_iSNV2=="nonsynonymous"&CDS2=="S")))
+ summary(lm(ns_iSNV_perKB*1000~RelativeDate,data=subset(iSNV_CDS_sample_count_ns,type_iSNV2=="synonymous"&CDS2=="Other")))
+ 
+ #Fig3D
+ 
+ iSNV_filter_anno_select$CDS2=factor(iSNV_filter_anno_select$CDS,labels=c("noncoding","noncoding","noncoding","S","Other","Other","N","orf1ab","Other","Other","Other","Other","Other","Other"))
+iSNV_cds2_ns=data.frame(table(iSNV_filter_anno_select[,c("CDS2","type_iSNV2")])[2:5,2:3])
+ ggplot(iSNV_cds2_ns,aes(x=CDS2,y=Freq,fill=type_iSNV2))+geom_bar(stat="identity",position="fill")+xlim("Other","orf1ab","N","S")+coord_flip()+theme_classic()
+ 
+ 
+ #Fig 3E
+ 
+ kaks_cds2_date=read.csv("kaks_cds2_date.csv")
+ ggplot(kaks_cds2_date,aes(x=CDS2,y=Ka_Ks,fill=DateOnset))+geom_bar(stat="identity",position="dodge")+xlim(c("S","N","orf1ab","Other"))+theme_classic()+geom_hline(yintercept = 1)
+ 
+ #Fig3F
+ YP_epitope_bed=read.delim("YP_epitope.merge.bed",header=F)
+YP_epitope_bed$len=YP_epitope_bed$V3-YP_epitope_bed$V2
+
+epitope_bed=read.delim("epitope_merge.bed",header=F)
+colnames(epitope_bed)=c("CDS","start","end")
+epitope_bed$length=epitope_bed$end-epitope_bed$start+1
+epitope_gene_sum=data.frame(sum_length=tapply(epitope_bed$length,epitope_bed$CDS,sum))
+epitope_gene_sum$CDS=rownames(epitope_gene_sum)
+epitope_gene_sum=merge(epitope_gene_sum,covid19_gene[,c(4,6,7)])
+epitope_gene_sum$expect_per=epitope_gene_sum$sum_length/as.numeric(epitope_gene_sum$protein_length)
+epitope_gene_sum$CDS2=c("Other","Other","N","Other","orf1ab","Other","Other","Other","Other","Other","S")
+epitope_gene_sum$YP_sum=as.numeric(tapply(YP_epitope_bed$len,YP_epitope_bed$V1,sum)[epitope_gene_sum$CDS])
+
+epitope_sum2=data.frame(cbind(epi_len=as.numeric(tapply(epitope_gene_sum$YP_sum,epitope_gene_sum$CDS2,sum)),geneLen=as.numeric(tapply(epitope_gene_sum$protein_length,epitope_gene_sum$CDS2,sum))))
+epitope_sum2$CDS2=c("N","orf1ab","Other","S")
+
+iSNV_filter_epitope=read.delim("iSNV_in_YP_epitope")
+colnames(iSNV_filter_epitope)[34]="if_in_epitope"
+iSNV_filter_epitope$CDS2=factor(iSNV_filter_epitope$CDS,labels=c("noncoding","noncoding","Other","noncoding","Other","N","Other","orf1ab","Other","Other","Other","Other","Other","S"))
+
+iSNV_epitope_expID_CDS2=subset(merge(data.frame(table(subset(iSNV_filter_epitope,if_in_epitope=="Y")[,c("type_iSNV2","ExpID","CDS2")])),data.frame(table(iSNV_filter_epitope[,c("type_iSNV2","ExpID","CDS2")])),by=c("type_iSNV2","ExpID","CDS2")),type_iSNV2!="noncoding")
+iSNV_epitope_expID_CDS2$perc_in_epi=iSNV_epitope_expID_CDS2$Freq.x/iSNV_epitope_expID_CDS2$Freq.y
+iSNV_epitope_expID_CDS2=merge(iSNV_epitope_expID_CDS2,sample_seqInfor_select_p[,c("ExpID","DateType","RelativeDate","FinalLevel","Gender","DuraType","ageType")])
+iSNV_epitope_expID_CDS2=subset(iSNV_epitope_expID_CDS2,CDS2!="noncoding")
+
+iSNV_epitope_expID_CDS2$type_epi="Within epitope"
+
+iSNV_epitope_expID_CDS2_out=subset(merge(data.frame(table(subset(iSNV_filter_epitope,if_in_epitope=="N")[,c("type_iSNV2","ExpID","CDS2")])),data.frame(table(iSNV_filter_epitope[,c("type_iSNV2","ExpID","CDS2")])),by=c("type_iSNV2","ExpID","CDS2")),type_iSNV2!="noncoding")
+iSNV_epitope_expID_CDS2_out$perc_in_epi=iSNV_epitope_expID_CDS2_out$Freq.x/iSNV_epitope_expID_CDS2_out$Freq.y
+iSNV_epitope_expID_CDS2_out=merge(iSNV_epitope_expID_CDS2_out,sample_seqInfor_select_p[,c("ExpID","DateType","RelativeDate","FinalLevel","Gender","DuraType","ageType")])
+iSNV_epitope_expID_CDS2_out=subset(iSNV_epitope_expID_CDS2_out,CDS2!="noncoding")
+iSNV_epitope_expID_CDS2_out$type_epi="Out of epitope"
+
+iSNV_epitope_expID_S=subset(rbind(iSNV_epitope_expID_CDS2,iSNV_epitope_expID_CDS2_out),CDS2=="S"&type_iSNV2=="nonsynonymous")
+ggplot(iSNV_epitope_expID_S,aes(x=RelativeDate,y=perc_in_epi,col=type_epi))+geom_point()+geom_smooth(method="lm")+theme_classic()
+```
+
+```{r figureS2}
+
+dura_sample_el=subset(sample_seqInfor_select,patientID %in% subset(dura_sample,duration>5)$patientID&(first == "Y"|last=="Y" ))
+dura_sample_el$el_type="first"
+dura_sample_el[dura_sample_el$last=="Y","el_type"]="last"
+
+
+dura_sample_el=merge(dura_sample_el,patient_select)
+
+p3c1=ggplot(dura_sample_el,aes(x=patientID,y=iSNV_perKB5,fill=el_type))+geom_bar(stat="identity",position="dodge")+xlim(c(as.character(accum_patients$patientID),as.character(puri_patients$patientID)))+theme_classic()+theme(legend.position = "top")
+p3c2=ggplot(dura_sample_el,aes(x=patientID,y=el_type,fill=SampleType))+geom_tile()+xlim(c(as.character(accum_patients$patientID),as.character(puri_patients$patientID)))+theme_classic()+theme(legend.position = "bottom")
+grid.arrange(p3c1,p3c2,heights=c(3,1))
+
+
+```
+
+```{r Figure4}
+
+##Figure 4A
+isnv_coding= data.frame(table(subset(iSNV_filter_anno_select,position_genome=="coding")$mut_mm))
+isnv_coding$type="coding"
+isnv_coding=isnv_coding[order(isnv_coding$Freq,decreasing=T),]
+isnv_coding$length=29264
+
+isnv_noncoding= data.frame(table(subset(iSNV_filter_anno_select,position_genome!="coding")$mut_mm))
+isnv_noncoding$type="noncoding"
+isnv_noncoding=isnv_noncoding[order(isnv_noncoding$Freq,decreasing=T),]  
+isnv_noncoding$length=639
+isnv_noncoding$Var1=as.character(isnv_noncoding$Var1)
+
+isnv_nc= rbind(isnv_coding,isnv_noncoding) 
+isnv_nc$freq_perKB=isnv_nc$Freq/isnv_nc$length*1000
+ggplot(isnv_nc,aes(x=Var1,y=freq_perKB,fill=type))+geom_bar(stat="identity",position="dodge")+the
+me_classic()+xlim(as.character(isnv_noncoding$Var1))
+
+##Figure 4B
+
+p2g1=ggplot(subset(iSNV_filter_anno_select_s,mut_mm=="C>T"&type_iSNV2!="noncoding"),aes(x=RelativeDate,y=freq_minor,col=type_iSNV2))+geom_point(shape=1)+geom_smooth(method="lm")+theme_classic()+ggtitle("C>T")
+p2g2=ggplot(subset(iSNV_filter_anno_select_s,mut_mm=="G>A"&type_iSNV2!="noncoding"),aes(x=RelativeDate,y=freq_minor,col=type_iSNV2))+geom_point(shape=1)+geom_smooth(method="lm")+theme_classic()+ggtitle("G>A")
+p2g3=ggplot(subset(iSNV_filter_anno_select_s,mut_mm=="T>C"&type_iSNV2!="noncoding"),aes(x=RelativeDate,y=freq_minor,col=type_iSNV2))+geom_point(shape=1)+geom_smooth(method="lm")+theme_classic()+ggtitle("T>C")
+p2g4=ggplot(subset(iSNV_filter_anno_select_s,mut_mm=="A>G"&type_iSNV2!="noncoding"),aes(x=RelativeDate,y=freq_minor,col=type_iSNV2))+geom_point(shape=1)+geom_smooth(method="lm")+theme_classic()+ggtitle("A>G")
+#Figure2G
+grid.arrange(p2g1,p2g2,p2g3,p2g4)
+
+
+```
+
+```{r FigureS3}
+##FigureS3A
+pos_GT3=read.delim("pos_GT3",header=F)
+pos_CA3=read.delim("pos_CA3",header=F)
+pos_AG3=read.delim("pos_AG3",header=F)
+pos_CT3=read.delim("pos_CT3",header=F)
+pos_GA3=read.delim("pos_GA3",header=F)
+pos_TC3=read.delim("pos_TC3",header=F)
+
+for_logo=list(GT=as.character(pos_GT3$V1),CA=as.character(pos_CA3$V1),AG=as.character(pos_AG3$V1),TC=as.character(pos_TC3$V1),CT=as.character(pos_CT3$V1),GA=as.character(pos_GA3$V1))
+ggseqlogo(for_logo,method="prob",nrow=3)
+
+##FigureS3B
+ggplot(subset(iSNV_filter_anno_select_s,type_iSNV2!="noncoding"),aes(x=RelativeDate,y=freq_minor,col=type_iSNV2))+geom_point(shape=1)+geom_smooth(method="lm")+theme_classic()+facet_wrap(mut_mm~.,ncol=3)
+
+```
+
+```{r Figure5}
+
+##Figure5A
+p4f2=ggplot(sample_seqInfor_select_p,aes(x=RelativeDate,y=iSNV_perKB5,col=Gender))+geom_point()+geom_smooth(method="lm")+theme_classic()+theme(legend.position = "top")
+p4f3=ggplot(sample_seqInfor_select_p,aes(x=RelativeDate,y=iSNV_perKB5,col=ageType))+geom_point()+geom_smooth(method="lm")+theme_classic()+theme(legend.position = "top")
+p4f4=ggplot(sample_seqInfor_select_p,aes(x=RelativeDate,y=iSNV_perKB5,col=DuraType))+geom_point()+geom_smooth(method="lm")+theme_classic()+theme(legend.position = "top")
+p4f5=ggplot(sample_seqInfor_select_p,aes(x=RelativeDate,y=iSNV_perKB5,col=FinalLevel))+geom_point()+geom_smooth(method="lm")+theme_classic()+theme(legend.position = "top")
+grid.arrange(p4f2,p4f3,p4f4,p4f5)
+
+##Figure5B
+
+ shared_patient_iSNV=read.delim("shared_patient.iSNV",header = F)
+ colnames(shared_patient_iSNV)=c("mut_ra","count_sample","count_patient","count_sampleType","sampleType")
+ shared_patient_iSNV=merge(shared_patient_iSNV,iSNV_filter_anno_select[,c("mut_ra","pos","ref","alt")])
+shared_patient_iSNV=merge(shared_patient_iSNV,unique(public_snp[,c("pos","gene","level_public")]),by=c("pos"),all.x=T)
+ shared_patient_iSNV$level_public=as.character(shared_patient_iSNV$level_public)
+ shared_patient_iSNV[is.na(shared_patient_iSNV$level_public),"level_public"]="IV"
+ shared_patient_iSNV=unique(shared_patient_iSNV)
+
+ iSNV_filter_pa=unique(iSNV_filter_anno_select[,c("mut_ra","patientID","chr","pos","ref","CDS","pos_in_gene","ref_coden","ref_aa","pos_in_coden","pos_in_protein","alt","alt_coden","alt_aa","CDS2","type_iSNV2")])
+iSNV_filter_pa=merge(iSNV_filter_pa,patient_select) 
+ 
+multi_iSNV=subset(shared_patient_iSNV,count_patient>6)
+multi_iSNV$mut_ra=as.character(multi_iSNV$mut_ra)
+multi_iSNV=merge(multi_iSNV,iSNV_count_sample[,1:13])
+multi_iSNV$CDS=as.character(multi_iSNV$CDS)
+multi_iSNV[multi_iSNV$CDS=="orf1ab","CDS"]="ORF1ab"
+multi_iSNV$gene_mut=paste0(multi_iSNV$CDS,":",multi_iSNV$ref_aa,multi_iSNV$pos_in_protein,multi_iSNV$alt_aa)
+
+shared_iSNV_level=table(subset(iSNV_filter_pa,mut_ra %in% multi_iSNV$mut_ra)[,c("mut_ra","FinalLevel")])
+multi_iSNV$Finallevel_p=apply(shared_iSNV_level,1,function(a){ fisher.test(rbind(a,table(patient_select$FinalLevel)-a))$p.value})[multi_iSNV$mut_ra]
+multi_iSNV$sever_perc= apply(shared_iSNV_level, 1, function(a){a[3]/sum(a)})[multi_iSNV$mut_ra]
+multi_iSNV=multi_iSNV[order(multi_iSNV$sever_perc),]
+multi_iSNV$sever_perc_rel=multi_iSNV$sever_perc-33/170 
+multi_iSNV$sever_type="server"
+multi_iSNV[multi_iSNV$sever_perc_rel<=0,"sever_type"]="mild"
+
+shared_iSNV_dura=table(subset(iSNV_filter_pa,mut_ra %in% multi_iSNV$mut_ra)[,c("mut_ra","DuraType")])
+multi_iSNV$dura_p=apply(shared_iSNV_dura,1,function(a){ fisher.test(rbind(a,table(patient_select$DuraType)-a))$p.value})[multi_iSNV$mut_ra]
+multi_iSNV$long_perc= apply(shared_iSNV_dura, 1, function(a){a[4]/sum(a)})[multi_iSNV$mut_ra]
+multi_iSNV=multi_iSNV[order(multi_iSNV$long_perc),]
+multi_iSNV$long_perc_r=multi_iSNV$long_perc-57/170
+multi_iSNV$shedding_type="long"
+multi_iSNV[multi_iSNV$long_perc_r<=0,"shedding_type"]="short"
+
+shared_iSNV_gender=table(subset(iSNV_filter_pa,mut_ra %in% multi_iSNV$mut_ra)[,c("mut_ra","Gender")])
+multi_iSNV$gender_p=apply(shared_iSNV_gender,1,function(a){ fisher.test(rbind(a,table(patient_select$Gender)-a))$p.value})[multi_iSNV$mut_ra]
+multi_iSNV$gender_perc= apply(shared_iSNV_gender, 1, function(a){a[2]/sum(a)})[multi_iSNV$mut_ra]
+multi_iSNV$gender_type="M"
+multi_iSNV[multi_iSNV$gender_perc<=87/170,"gender_type"]="F"
+multi_iSNV$gender_perc_rel=multi_iSNV$gender_perc -87/170
+
+
+shared_iSNV_age=table(subset(iSNV_filter_pa,mut_ra %in% multi_iSNV$mut_ra)[,c("mut_ra","ageType")])
+multi_iSNV$age_perc2= apply(shared_iSNV_age, 1, function(a){a[3]/sum(a)})[multi_iSNV$mut_ra]
+multi_iSNV$age_p=apply(shared_iSNV_age,1,function(a){ fisher.test(rbind(a,table(patient_select$ageType)-a))$p.value})[multi_iSNV$mut_ra]
+multi_iSNV$age_type="old"
+multi_iSNV[multi_iSNV$age_perc2<=22/170,"age_type"]="young"
+multi_iSNV$age_perc_rel=multi_iSNV$age_perc2 -22/170
+
+
+hf_iSNV_pheno=subset(multi_iSNV,count_patient>6)[,c("mut_ra","Finallevel_p","sever_perc_rel")]
+colnames(hf_iSNV_pheno)=c("mut_ra","p_value","relative_perc") 
+hf_iSNV_pheno$type="illness_severity"
+
+hf_iSNV_pheno2=subset(multi_iSNV,count_patient>6)[,c("mut_ra","dura_p","long_perc_r")]
+colnames(hf_iSNV_pheno2)=c("mut_ra","p_value","relative_perc") 
+hf_iSNV_pheno2$type="viral_sheding_time"
+hf_iSNV_pheno=rbind(hf_iSNV_pheno,hf_iSNV_pheno2)
+
+hf_iSNV_pheno2=subset(multi_iSNV,count_patient>6)[,c("mut_ra","gender_p","gender_perc_rel")]
+colnames(hf_iSNV_pheno2)=c("mut_ra","p_value","relative_perc") 
+hf_iSNV_pheno2$type="gender"
+hf_iSNV_pheno=rbind(hf_iSNV_pheno,hf_iSNV_pheno2)
+
+hf_iSNV_pheno2=subset(multi_iSNV,count_patient>6)[,c("mut_ra","age_p","age_perc_rel")]
+colnames(hf_iSNV_pheno2)=c("mut_ra","p_value","relative_perc") 
+hf_iSNV_pheno2$type="age"
+hf_iSNV_pheno=rbind(hf_iSNV_pheno,hf_iSNV_pheno2)
+
+hf_iSNV_pheno2=subset(multi_iSNV,count_patient>6)[,c("mut_ra","Finallevel_p","sever_perc_rel")]
+colnames(hf_iSNV_pheno2)=c("mut_ra","p_value","relative_perc") 
+
+multi_iSNV$protein_mut=paste0(multi_iSNV$CDS," ",multi_iSNV$ref_aa,multi_iSNV$pos_in_protein,multi_iSNV$alt_aa)
+hf_iSNV_pheno$p_value_type=1
+hf_iSNV_pheno[hf_iSNV_pheno$p_value<0.05,"p_value_type"]=2
+hf_iSNV_pheno=merge(hf_iSNV_pheno,multi_iSNV[,c("mut_ra","gene_mut","protein_mut")])
+hf_iSNV_pheno2=merge(hf_iSNV_pheno2,multi_iSNV[,c("mut_ra","gene_mut","protein_mut","CDS")])
+
+
+ggplot(hf_iSNV_pheno,aes(x= type,y=mut_ra,col=relative_perc,size=p_value_type))+geom_point()+scale_color_gradient2(low = "blue",high="red",mid="grey")+ylim(hf_iSNV_pheno2[order(hf_iSNV_pheno2$relative_perc),"mut_ra"])+theme_classic()+xlim(c("illness_severity","age","viral_sheding_time","gender"))
+
+##Figure5C
+ multi_iSNV=multi_iSNV[order(multi_iSNV$sever_perc,decreasing = T),]
+p1=ggplot(data.frame(shared_iSNV_level),aes(x=mut_ra,fill=FinalLevel,y=Freq))+geom_bar(stat="identity",position="fill")+geom_hline(yintercept = c(33/170))+theme_classic()+xlim(multi_iSNV$mut_ra)
+p2=ggplot(multi_iSNV,aes(x=mut_ra,y=count_patient,col=level_public))+geom_point()+geom_segment(aes(xend=mut_ra,yend=0))+theme_classic()+xlim(multi_iSNV$mut_ra)+theme(axis.text.x = element_blank())
+
+grid.arrange(p2,p1,ncol=1) 
+ 
+```
+
+```{r FigureS4}
+
+#FigS4A
+multi_iSNV=multi_iSNV[order(multi_iSNV$gender_perc,decreasing = T),]
+p1=ggplot(data.frame(shared_iSNV_gender),aes(x=mut_ra,fill=Gender,y=Freq))+geom_bar(stat="identity",position="fill")+geom_hline(yintercept = c(87/170))+theme_classic()+xlim(multi_iSNV$mut_ra)
+p2=ggplot(multi_iSNV,aes(x=mut_ra,y=count_patient,col=level_public))+geom_point()+geom_segment(aes(xend=mut_ra,yend=0))+theme_classic()+xlim(multi_iSNV$mut_ra)+theme(axis.text.x = element_blank())
+grid.arrange(p2,p1,ncol=1) 
+
+#FigS4B
+multi_iSNV=multi_iSNV[order(multi_iSNV$age_perc,decreasing = T),]
+p1=ggplot(data.frame(shared_iSNV_age),aes(x=mut_ra,fill=ageType,y=Freq))+geom_bar(stat="identity",position="fill")+geom_hline(yintercept = 22/170)+theme_classic()+xlim(multi_iSNV$mut_ra)
+p2=ggplot(multi_iSNV,aes(x=mut_ra,y=count_patient,col=level_public))+geom_point()+geom_segment(aes(xend=mut_ra,yend=0))+theme_classic()+xlim(multi_iSNV$mut_ra)+theme(axis.text.x = element_blank())
+grid.arrange(p2,p1,ncol=1) 
+
+#FigS4C
+multi_iSNV=multi_iSNV[order(multi_iSNV$long_perc,decreasing = T),]
+p1=ggplot(data.frame(shared_iSNV_dura),aes(x=mut_ra,fill=DuraType,y=Freq))+geom_bar(stat="identity",position="fill")+geom_hline(yintercept = 57/170)+theme_classic()+xlim(multi_iSNV$mut_ra)
+p2=ggplot(multi_iSNV,aes(x=mut_ra,y=count_patient,col=level_public))+geom_point()+geom_segment(aes(xend=mut_ra,yend=0))+theme_classic()+xlim(multi_iSNV$mut_ra)+theme(axis.text.x = element_blank())
+grid.arrange(p2,p1,ncol=1) 
+
+
+```
+
+
+```{r Figure6}
+
+hqSNP_fix_anno=read.delim("hqSNP_fix_anno",skip = 1,header = F)
+hqSNP_fix_anno$mut_ra=paste0(hqSNP_fix_anno$V6,hqSNP_fix_anno$V3,hqSNP_fix_anno$V11)
+hqSNP_fix_anno$type=as.character(hqSNP_fix_anno$V18)
+hqSNP_fix_anno[hqSNP_fix_anno$type %in% c("3'UTR","5'UTR","intergenic"),"type"]="noncoding"
+hqSNP_fix_anno[hqSNP_fix_anno$type %in% c("missense","stop-gain","stop-loss"),"type"]="nonsynonymous"
+hqSNP_fix_anno$date="FixAfterMay"
+hqSNP_fix_anno[hqSNP_fix_anno$V2 %in% c("2020-01","2020-02","2020-03","2020-04"),"date"]="FixBeforeMay"
+
+iSNV_select_date=merge(iSNV_filter_anno_select,hqSNP_fix_anno[,c("mut_ra","date")],all.x=T)
+iSNV_select_date$date2="Fixed"
+iSNV_select_date[is.na(iSNV_select_date$date),"date2"]="NotFix"
+
+#fig5B
+ggplot(subset(data.frame(table(iSNV_select_date[,c("date2","type_iSNV2")])),type_iSNV2!="noncoding"),aes(x=date2,y=Freq,fill=type_iSNV2))+geom_bar(stat="identity",position="dodge")+theme_classic()
+
+#fig5C
+ggplot(subset(data.frame(table(iSNV_select_date[,c("CDS2","date2","type_iSNV2")])),CDS2!="noncoding"&type_iSNV2=="nonsynonymous"),aes(x=CDS2,y=Freq,fill=date2))+geom_bar(stat="identity",position = "fill")+xlim(rev(c("S","N","orf1ab","Other")))+theme_classic()+coord_flip()+facet_grid(.~type_iSNV2)
+ 
+
+##Fig5D
+
+SNP_ra_filter5_anno=read.delim("SNP_ra_filter_odd5.anno",header=F,skip = 1)
+SNP_ra_filter5_anno$mut_ra=paste0(SNP_ra_filter5_anno$V6,SNP_ra_filter5_anno$V3,SNP_ra_filter5_anno$V11)
+SNP_ra_filter5_anno$type=as.character(SNP_ra_filter5_anno$V18)
+SNP_ra_filter5_anno[SNP_ra_filter5_anno$type %in% c("3'UTR","5'UTR","intergenic"),"type"]="noncoding"
+SNP_ra_filter5_anno[SNP_ra_filter5_anno$type %in% c("missense","stop-gain","stop-loss"),"type"]="nonsynonymous"
+
+
+SNP_ra_filter5_anno$CDS2=factor(SNP_ra_filter5_anno$V4,labels=c("Other","Other","N","Other","orf1ab","Other","Other","Other","Other","Other","S"))
+SNP_CDS2_ns=data.frame(acast(data.frame(table(SNP_ra_filter5_anno[,c("CDS2","type")])[,2:3]),CDS2~type))
+SNP_CDS2_ns$ns=SNP_CDS2_ns$nonsynonymous/SNP_CDS2_ns$synonymous
+SNP_CDS2_ns$gene=rownames(SNP_CDS2_ns)
+SNP_CDS2_ns$type="SNP"
+table(subset(SNP_select_anno_s,CDS2=="S"&mut_ra !="A23403G")$type)
+SNP_CDS2_ns=rbind(SNP_CDS2_ns,c(100, 33,100/33,"S_rmD614G","SNP"))
+SNP_CDS2_ns$ns=as.numeric(SNP_CDS2_ns$ns)
+
+iSNV_CDS2_ns=data.frame(acast(data.frame(table(iSNV_filter_anno_select[,c("CDS2","type_iSNV2")])[2:4,2:3]),CDS2~type_iSNV2))
+iSNV_CDS2_ns$ns=iSNV_CDS2_ns$nonsynonymous/iSNV_CDS2_ns$synonymous
+iSNV_CDS2_ns$gene=rownames(iSNV_CDS2_ns)
+iSNV_CDS2_ns$type="iSNV"
+
+table(subset(iSNV_filter_anno_select,CDS=="S"&mut_ra !="A23403G")$type_iSNV2)
+iSNV_CDS2_ns=rbind(iSNV_CDS2_ns,c(723, 143,723/143,"S_rmD614G","iSNV"))
+iSNV_CDS2_ns$ns=as.numeric(iSNV_CDS2_ns$ns)
+
+
+##Figure6D
+ggplot(rbind(iSNV_CDS2_ns,SNP_CDS2_ns),aes(x=gene,y=ns,fill=type))+geom_bar(stat="identity",position="dodge")+theme_classic()+xlim(c("orf1ab","S","N","Other","S_rmD614G"))
+
+ 
+iSNV_fix_count_date=merge(data.frame(table(subset(iSNV_select_date,date2=="Fixed")[,c("ExpID")])),data.frame(table(subset(iSNV_select_date,date2=="NotFix")[,c("ExpID")])),by=c("Var1"))
+colnames(iSNV_fix_count_date)=c("ExpID","Count_fix","Count_notfix")
+iSNV_fix_count_date$fix_perc=iSNV_fix_count_date$Count_fix/(iSNV_fix_count_date$Count_fix+iSNV_fix_count_date$Count_notfix)
+iSNV_fix_count_date=merge(iSNV_fix_count_date,sample_seqInfor_select_p[,c("ExpID","DateType","RelativeDate","FinalLevel","Gender","DuraType","ageType")])
+iSNV_fix_count_date$fix_perc=iSNV_fix_count_date$Count_fix/(iSNV_fix_count_date$Count_fix+iSNV_fix_count_date$Count_notfix)
+
+##fig 6E
+ggplot(iSNV_fix_count_date,aes(y=fix_perc,x=RelativeDate))+geom_point()+geom_smooth(method = "lm")+theme_classic()
+
+# ggplot(subset(data.frame(table(iSNV_select_date[,c("CDS2","date2")])),CDS2!="noncoding"),aes(x=CDS2,y=Freq,fill=date2))+geom_bar(stat="identity",position = "fill")+xlim(rev(c("S","N","orf1ab","Other")))+theme_classic()+coord_flip()
+
+
+##Figure6F
+ iSNV_SNP_ra=read.delim("iSNV_SNP_ra_pos_sample")
+ iSNV_SNP_ra$sample=as.character(iSNV_SNP_ra$sample)
+ iSNV_SNP_ra=subset(iSNV_SNP_ra,sample %in% sample_seqInfor_select$ExpID)
+ iSNV_SNP_ra$sample=factor(iSNV_SNP_ra$sample,levels = sample_seqInfor_select$ExpID)
+ iSNV_SNP_ra$mut=paste0(iSNV_SNP_ra$pos,iSNV_SNP_ra$alt)
+  rm(iSNV_SNP_ra)
+mut_7051T=subset(iSNV_SNP_ra,mut =="7051T"&dep_all>100 )
+mut_7051T=mut_7051T[order(mut_7051T$perc_allele2),]
+mut_7051T$order=1:nrow(mut_7051T)/nrow(mut_7051T)
+ ggplot(mut_7051T,aes(x=order,y=perc_allele2))+geom_point()+geom_line()+theme_classic()+ylim(0,1)+ggtitle("7051T")+coord_cartesian(xlim=c(0.95,1))+geom_hline(yintercept = 0.05)
+
+gt_7051_time=read.delim("tmp_7051_gt_cum",header=F)
+ggplot(subset(gt_7051_time,V2==1),aes(x=V1))+geom_point(aes(y=V4))+geom_line(aes(y=V4),group=1)+theme_classic()
+
+```
+
+```{r FigureS5}
+#Figure S5A
+ ggplot(subset(data.frame(table(iSNV_select_date[,c("CDS2","date2","type_iSNV2")])),CDS2!="noncoding"&type_iSNV2!="noncoding"),aes(x=CDS2,y=Freq,fill=date2))+geom_bar(stat="identity",position = "fill")+xlim(rev(c("S","N","orf1ab","Other")))+theme_classic()+coord_flip()+facet_grid(.~type_iSNV2)
+
+
+iSNV_fix_count_date_CDS=merge(data.frame(table(subset(iSNV_select_date,date2=="Fixed")[,c("ExpID","CDS2")])),data.frame(table(subset(iSNV_select_date,date2=="NotFix")[,c("ExpID","CDS2")])),by=c("ExpID","CDS2"))
+colnames(iSNV_fix_count_date_CDS)[3:4]=c("Count_fix","Count_notfix")
+iSNV_fix_count_date_CDS=merge(iSNV_fix_count_date_CDS,sample_seqInfor_select_p[,c("ExpID","DateType","RelativeDate","FinalLevel","Gender","DuraType","DuraType2","ageType")])
+iSNV_fix_count_date_CDS$fix_perc=iSNV_fix_count_date_CDS$Count_fix/(iSNV_fix_count_date_CDS$Count_fix+iSNV_fix_count_date_CDS$Count_notfix)
+
+#Figure S5B
+iSNV_fix_count_date_ns=merge(data.frame(table(subset(iSNV_select_date,date2=="Fixed")[,c("ExpID","type_iSNV2")])),data.frame(table(subset(iSNV_select_date,date2=="NotFix")[,c("ExpID","type_iSNV2")])),by=c("ExpID","type_iSNV2"))
+colnames(iSNV_fix_count_date_ns)[3:4]=c("Count_fix","Count_notfix")
+iSNV_fix_count_date_ns$fix_perc=iSNV_fix_count_date_ns$Count_fix/(iSNV_fix_count_date_ns$Count_fix+iSNV_fix_count_date_ns$Count_notfix)
+iSNV_fix_count_date_ns=merge(iSNV_fix_count_date_ns,sample_seqInfor_select_p[,c("ExpID","Genome_100x","DateType","RelativeDate","FinalLevel","Gender","DuraType","ageType")])
+ggplot(subset(iSNV_fix_count_date_ns,type_iSNV2!="noncoding"),aes(x=RelativeDate,y=fix_perc,col=type_iSNV2))+geom_point()+geom_smooth(method="lm")+theme_classic()
+```
+
+```{r Figure7}
+
+#Eigure7A
+ count_S_mut=data.frame(table(subset(iSNV_filter_anno_select,CDS=="S")$pos_in_protein))
+ count_S_mut$Var1=as.numeric(as.character(count_S_mut$Var1))
+ count_S_mut$Freq2=count_S_mut$Freq
+ count_S_mut[count_S_mut$Freq>12,"Freq2"]=12
+count_S_mut=subset(count_S_mut,Freq>0)
+ggplot(count_S_mut,aes(x=Var1,y=Freq2))+geom_segment(data=subset(count_S_mut,Freq>1),aes(x=Var1,xend=Var1,y=0,yend=Freq2))+geom_point(shape=1)+theme_classic()+scale_y_continuous(breaks=c(0,3,6,9,12))
+
+#Figure7B
+iSNV_entry=read.delim("entry_exp_mut.txt")
+iSNV_entry$fold_lg=log10(iSNV_entry$Fold_change)
+iSNV_entry_median=data.frame(median=tapply(iSNV_entry$fold_lg,iSNV_entry$Mut,median),mean=tapply(iSNV_entry$fold_lg,iSNV_entry$Mut,mean),sd=tapply(iSNV_entry$fold_lg,iSNV_entry$Mut,sd))
+iSNV_entry_median$Mut=rownames(iSNV_entry_median)
+iSNV_entry_median$p.value=1
+for (i in c(1:16,18)){
+  iSNV_entry_median[i,5]=t.test(Fold_change~Mut,subset(iSNV_entry,Mut=="WT"|Mut==iSNV_entry_median[i,4]))$p.value
+}
+ggplot(iSNV_entry_median,aes(x=Mut,y=mean))+geom_bar(stat="identity")+geom_errorbar(aes(ymin=mean-sd,ymax=mean+sd))+theme_classic()+xlim(as.character(unique(iSNV_entry$Mut)))+geom_hline(yintercept = c(0,log10(4),log10(0.25)))+coord_flip()
+
+
+#Figure7C
+iSNV_calclulate=read.delim("iSNV_calculate")
+ggplot(iSNV_calclulate,aes(x=mut,y=mean_norm-1,fill=type))+geom_bar(stat="identity",position = "dodge")+theme_classic()+xlim( unique(as.character(iSNV_calclulate$mut)))
+iSNV_cb6=read.delim("iSNV_calculate_cb6.txt")
+ggplot(iSNV_cb6,aes(x=mut,y=mean_norm-1,fill=type))+geom_bar(stat="identity",position = "dodge")+theme_classic()+xlim( unique(as.character(iSNV_calclulate$mut)))
+
+```
