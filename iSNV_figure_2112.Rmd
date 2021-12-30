@@ -417,7 +417,7 @@ SNP_CDS2_ns=data.frame(acast(data.frame(table(SNP_ra_filter5_anno[,c("CDS2","typ
 SNP_CDS2_ns$ns=SNP_CDS2_ns$nonsynonymous/SNP_CDS2_ns$synonymous
 SNP_CDS2_ns$gene=rownames(SNP_CDS2_ns)
 SNP_CDS2_ns$type="SNP"
-table(subset(SNP_select_anno_s,CDS2=="S"&mut_ra !="A23403G")$type)
+table(subset(SNP_ra_filter5_anno,CDS2=="S"&mut_ra !="A23403G")$type)
 SNP_CDS2_ns=rbind(SNP_CDS2_ns,c(114, 42,114/42,"S_rmD614G","SNP"))
 SNP_CDS2_ns$ns=as.numeric(SNP_CDS2_ns$ns)
 
