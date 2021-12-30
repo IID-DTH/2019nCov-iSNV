@@ -100,25 +100,25 @@ library(gridExtra)
 ```
 
 
-```{r Figure2}
-##Figure2A
+```{r Figure1}
+##Figure1A
 ggplot(sample_seqInfor,aes(x=RelativeDate,y=AverageDepth))+geom_point(aes(col=SampleType,size=perc_100x),shape=1)+theme_classic()+scale_y_log10()+scale_color_manual(values = c("#8EC31E","#C30D22","#2DA7E0"))
 
 
-##Figure2B
+##Figure1B
 sample_count=data.frame(table(sample_seqInfor_select$patientID))
 sample_count$Freq2=sample_count$Freq
 sample_count[sample_count$Freq2>5,"Freq2"]=5
 ggplot(data.frame(table(sample_count$Freq2)),aes(x=Var1,y=Freq))+geom_bar(stat="identity",width=0.3)+theme_classic()+xlab("Samples/Case")+ylab("Case number")
 
 
-##Figure 2C
+##Figure 1C
 
 library(gggenes)
 ggplot()+geom_gene_arrow(data=covid19_gene,aes(xmin=start,xmax=end,y=genome,fill=geneName))+scale_fill_brewer(palette = "Set3")+theme_genes()
 ggplot(iSNV_filter_anno_select,aes(x=pos))+geom_histogram(binwidth=100,aes(fill=CDS))+theme_classic()+theme(legend.position = "top")
 
-##Figure 2D
+##Figure 1D
 
 iSNV_CDS_sum=data.frame(cbind(tapply(iSNV_CDS_sample_count$Freq,iSNV_CDS_sample_count$CDS,sum),tapply(iSNV_CDS_sample_count$CDS_cov,iSNV_CDS_sample_count$CDS,sum)))
 colnames(iSNV_CDS_sum)=c("iSNV_count_sum","cover_sum")
@@ -126,14 +126,14 @@ iSNV_CDS_sum$iSNV_perKB=iSNV_CDS_sum$iSNV_count_sum/iSNV_CDS_sum$cover_sum*1000
 
 ggplot(iSNV_CDS_sum,aes(x=CDS,y=iSNV_perKB))+geom_bar(stat="identity")+xlim(rev(c("S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10")))+coord_flip()+theme_classic()
 
-##Figure 2E
+##Figure 1E
 label_coden=data.frame(table(subset(iSNV_filter_anno_select,position_genome=="coding")[,c("CDS","pos_in_coden")]))
 label_coden=subset(label_coden,pos_in_coden!="-")
 label_coden$pos_x=as.numeric(label_coden$pos_in_coden)/3-0.5
 
 ggplot()+geom_bar(data=subset(iSNV_filter_anno_select,position_genome=="coding"),aes(x=CDS,fill=pos_in_coden ),position = "fill",width=0.5)+geom_text(data=label_coden,aes(x=CDS,y=pos_x,label=Freq))+xlim(rev(c("S","E","M","N","orf1ab","ORF3a","ORF6","ORF7a","ORF7b","ORF8","ORF10")))+scale_y_continuous(breaks=c(0,1/3,2/3,1))+coord_flip()+theme_classic()
 
-##Figure 2F
+##Figure 1F
 
 iSNV_count_sample=unique(iSNV_filter_anno_select[,c("mut_ra","chr","pos","ref","CDS","pos_in_gene","ref_coden","ref_aa","pos_in_coden","pos_in_protein","alt","alt_coden","alt_aa")])
 iSNV_count_sample$count_sample=as.numeric(table(iSNV_filter_anno_select$mut_ra)[iSNV_count_sample$mut_ra])
@@ -145,7 +145,7 @@ iSNV_count_sample_pub[is.na(iSNV_count_sample_pub$level_public),"level_public"]=
 
 ggplot()+geom_segment(data=subset(iSNV_count_sample_pub,count_pat>15),aes(x=pos,xend=pos,y=2,yend=count_pat,col=level_public))+geom_point(data=subset(iSNV_count_sample_pub,count_pat>1),aes(x=pos,y=count_pat,col=level_public))+theme_classic()
 
-##Figure 2G
+##Figure 1G
 random_iSNV=round(runif(7037,1,29903))
 random_iSNV=random_iSNV[order(random_iSNV)]
 random_distance=array(0,7036)
@@ -158,7 +158,7 @@ for (i in 1:7036){iSNV_dist[i]=pos_iSNV[i+1]-pos_iSNV[i]}
 
 ggplot()+geom_density(data=data.frame(random_distance),aes(x=random_distance,col="expected"))+geom_density(data=data.frame(iSNV_dist),aes(x=iSNV_dist,col="iSNV"))+theme_classic()+coord_cartesian(xlim=c(0,20))
 
-##Figure 2H
+##Figure 1H
 minor_count=data.frame(table(cut(iSNV_filter_anno_select$freq_minor,breaks=0.005*(10:100))))
 minor_count$label=0.005*(11:100)-0.0025
 minor_count$label_1=1/minor_count$label
@@ -517,7 +517,7 @@ SNP_CDS2_ns$ns=SNP_CDS2_ns$nonsynonymous/SNP_CDS2_ns$synonymous
 SNP_CDS2_ns$gene=rownames(SNP_CDS2_ns)
 SNP_CDS2_ns$type="SNP"
 table(subset(SNP_select_anno_s,CDS2=="S"&mut_ra !="A23403G")$type)
-SNP_CDS2_ns=rbind(SNP_CDS2_ns,c(100, 33,100/33,"S_rmD614G","SNP"))
+SNP_CDS2_ns=rbind(SNP_CDS2_ns,c(114, 42,114/42,"S_rmD614G","SNP"))
 SNP_CDS2_ns$ns=as.numeric(SNP_CDS2_ns$ns)
 
 iSNV_CDS2_ns=data.frame(acast(data.frame(table(iSNV_filter_anno_select[,c("CDS2","type_iSNV2")])[2:4,2:3]),CDS2~type_iSNV2))
